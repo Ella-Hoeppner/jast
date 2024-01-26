@@ -1,0 +1,2 @@
+{:hooks {:macroexpand
+         {jast.tools/unquotable jast.tools/unquotable}}}
