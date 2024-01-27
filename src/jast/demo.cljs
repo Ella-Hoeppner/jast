@@ -2,6 +2,11 @@
   (:require [jast.core :as j]
             [jast.tools :refer [unquotable]]))
 
+(def jast-example-program
+  (unquotable
+   '((= x 1)
+     (++ x))))
+
 (defn test-jast [program]
   (js/console.log (j/jast->js program)))
 
@@ -9,5 +14,4 @@
   (js/window.addEventListener
    "load"
    (fn []
-     (test-jast '((= x 1)
-                  (++ x))))))
+     (test-jast jast-example-program))))
