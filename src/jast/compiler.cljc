@@ -12,18 +12,21 @@
 (def modifying-assigners
   '#{+= *= -= "/=" "^=" "%=" |= &= <<= >>=})
 
-(defn expression->js [expression]
+(defn parenthesize [s]
+  (str "(" s ")"))
+
+(defn expression->js [expression & [top-level]]
   (cond
     (symbol? expression) (clj-name->js expression)
 
     (or (number? expression) (boolean? expression)) (str expression)
 
-    (string? expression) expression
+    (string? expression) (str \" expression \")
 
     (vector? expression)
     (str "["
-         (join (map expression->js expression)
-               ", ")
+         (join ", "
+               (map expression->js expression))
          "]")
 
     (seq? expression)
@@ -46,35 +49,63 @@
              (expression->js (second args)))
 
         (infix-ops f)
-        (str "("
-             (join (str " " f " ")
-                   (map expression->js args))
-             ")")
+        (parenthesize (join (str " " f " ")
+                            (map expression->js args)))
 
         (= 'if f)
         (let [[conditional true-expression false-expression] args]
-          (str "("
-               (expression->js conditional)
-               " ? "
-               (expression->js true-expression)
-               " : "
-               (expression->js false-expression)
-               ")"))
+          (parenthesize
+           (str (expression->js conditional)
+                " ? "
+                (expression->js true-expression)
+                " : "
+                (expression->js false-expression))))
 
         (= '= f)
-        (str (expression->js (first args))
+        (cond-> (str (expression->js (first args))
+                     " = "
+                     (expression->js (second args)))
+          (not top-level) parenthesize)
+
+        ('#{let const var} f)
+        (str f
+             " "
+             (expression->js (first args))
              " = "
              (expression->js (second args)))
 
+        (= 'fn f)
+        (let [[arg-names & body] args]
+          (parenthesize
+           (str (if (= 1 (count arg-names))
+                  (clj-name->js (first arg-names))
+                  (str "("
+                       (join "," arg-names)
+                       ")"))
+                " => "
+                (if (= 1 (count body))
+                  (expression->js (first body))
+                  "JAST: multi-line functions don't work yet!"))))
+
+        (= 'raw-js f)
+        (str (first args))
+
+        (and (symbol? f) (= ".-" (subs (str f) 0 2)))
+        (str (expression->js (first args))
+             "."
+             (clj-name->js (subs (str f) 2)))
+
         (and (symbol? f) (= "." (first (str f))))
         (str (expression->js (first args))
-             (clj-name->js f))
+             (clj-name->js f)
+             (parenthesize
+              (join ", "
+                    (map expression->js (rest args)))))
 
-        :else (str (clj-name->js f)
-                   "("
-                   (join ", "
-                         (map expression->js args))
-                   ")")))
+        :else (str (expression->js f)
+                   (parenthesize
+                    (join ", "
+                          (map expression->js args))))))
 
     :else (throw-str (str "jast: Can't parse expression: " expression))))
 
@@ -184,7 +215,8 @@
              (= (first statement) 'do))
       (mapcat statement->lines
               (rest statement))
-      (try (list (str (expression->js statement) ";\n"))
+      (try (list (str (expression->js statement true)
+                      ";\n"))
            #?(:cljs (catch :default e
                       (throw
                        (ex-info
