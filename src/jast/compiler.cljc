@@ -24,10 +24,18 @@
     (string? expression) (str \" expression \")
 
     (vector? expression)
-    (str "["
-         (join ", "
-               (map expression->js expression))
-         "]")
+    (if (and (seq? (first expression))
+             (= 'clojure.core/deref
+                (first (first expression))))
+      (let [[[_ array-expression] index-expression] expression]
+        (str (expression->js array-expression)
+             "["
+             (expression->js index-expression)
+             "]"))
+      (str "["
+           (join ", "
+                 (map expression->js expression))
+           "]"))
 
     (seq? expression)
     (let [[f & args] expression]
@@ -42,7 +50,7 @@
         (str "(1./" (expression->js (first args)) ")")
 
         (modifying-assigners f)
-        (str (clj-name->js (first args))
+        (str (expression->js (first args))
              " "
              f
              " "
@@ -80,7 +88,7 @@
            (str (if (= 1 (count arg-names))
                   (clj-name->js (first arg-names))
                   (str "("
-                       (join "," arg-names)
+                       (join "," (map clj-name->js arg-names))
                        ")"))
                 " => "
                 (if (= 1 (count body))
@@ -111,13 +119,14 @@
 
 (defn is-statement-block? [statement]
   (and (seq? statement)
-       (#{"if" :if
-          "when" :when
-          "else" :else
-          "else-if" "else if" "elseif" "elif" :else-if :elseif :elif
-          "while" :while
-          "for" :for
-          "block" :block}
+       (#{:if
+          :when
+          :else
+          :else-if :elseif :elif
+          :while
+          :for
+          :for-of
+          :block}
         (first statement))))
 
 (defn statement->lines [statement]
@@ -145,29 +154,29 @@
                     (list "}\n"))))
         (let [[block-start consumed-statement-args]
               (cond
-                (#{:when "when"} statement-type)
+                (= :when statement-type)
                 [(str "if ("
                       (expression->js (first statement-args))
                       ") {")
                  1]
 
-                (#{:while "while"} statement-type)
+                (= :while statement-type)
                 [(str "while ("
                       (expression->js (first statement-args))
                       ") {")
                  1]
 
-                (#{:else "else"} statement-type)
+                (= :else statement-type)
                 ["else {" 0]
 
-                (#{:else-if :elseif :elif "else if" "else-if" "elseif" "elif"}
+                (#{:else-if :elseif :elif}
                  statement-type)
                 [(str "else if ("
                       (expression->js (first statement-args))
                       ") {")
                  1]
 
-                (#{:for "for"} statement-type)
+                (= :for statement-type)
                 (if (vector? (first statement-args))
                   (let [loop-definition (first statement-args)
                         [binding-name & loop-args] loop-definition
@@ -182,16 +191,16 @@
                                       (if (number? value)
                                         (str value)
                                         (expression->js value)))]
-                      [(str "for (int "
-                            (clj-name->js binding-name)
+                      [(str "for (let "
+                            (expression->js binding-name)
                             " = "
                             (parse-value initial-value)
                             "; "
-                            (clj-name->js binding-name)
+                            (expression->js binding-name)
                             " < "
                             (parse-value max-value)
                             "; "
-                            (clj-name->js binding-name)
+                            (expression->js binding-name)
                             (if increment-value
                               (str " += " (parse-value increment-value))
                               "++")
@@ -203,8 +212,17 @@
                                    (take 3 statement-args)))
                         ") {")
                    3])
+                
+                (= :for-of statement-type)
+                [(let [[[var-name collection-name]] statement-args]
+                   (str "for (let "
+                        (expression->js var-name)
+                        " of "
+                        (expression->js collection-name)
+                        ") {"))
+                 1]
 
-                (#{:block "block"} statement-type)
+                (:block statement-type)
                 ["{" 0])]
           (concat (list (str block-start "\n"))
                   (map (partial str "  ")
@@ -231,5 +249,8 @@
                                 e)))))))))
 
 
-(defn compile-jast [program]
+(defn compile-jast-expression [expression]
+  (expression->js expression true))
+
+(defn compile-jast-program [program]
   (join (mapcat statement->lines program)))

@@ -1,8 +1,8 @@
-(ns jast.demo
-  (:require [jast.core :as j]
+(ns jast.demos.minimal-webgl
+  (:require [jast.core :refer [jast->js-program]]
             [jast.tools :refer [unquotable]]))
 
-(def jast-example-program
+(def jast-webgl-program
   (unquotable
    '((let canvas (document.createElement "canvas"))
      (document.body.appendChild canvas)
@@ -12,7 +12,7 @@
      (let p (gl.createProgram (= t 35633)))
      (.map [(raw-js
              "`out V u;
-                      void main(){
+              void main(){
                 X x=X(-1);
                 x[gl_VertexID]=3.;
                 gl_Position=X(u=x.xy,0,1);
@@ -75,11 +75,8 @@
                                      (/ (performance.now) 1000))
                                     (gl.drawArrays 5 0 3))))))))
 
-(defn test-jast [program]
-  (js/eval (j/jast->js program)))
+(defn start-demo []
+  (js/eval (jast->js-program jast-webgl-program)))
 
 (defn init []
-  (js/window.addEventListener
-   "load"
-   (fn []
-     (test-jast jast-example-program))))
+  (js/window.addEventListener "load" start-demo))

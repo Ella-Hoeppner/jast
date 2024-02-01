@@ -4,4 +4,4 @@
  :builds {:browser {:target :browser
                     :output-dir "out/js"
                     :modules {:base
-                              {:init-fn jast.demo/init}}}}}
+                              {:init-fn jast.demos.loops/init}}}}}
