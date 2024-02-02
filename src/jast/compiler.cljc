@@ -1,10 +1,18 @@
 (ns jast.compiler
-  (:require [clojure.string :refer [join]]
+  (:require [clojure.string :refer [join split]]
             [jast.tools :refer [clj-name->js]]))
 
 (defn throw-str [s]
   (throw #?(:cljs s)
          #?(:clj (Exception. s))))
+
+(defn parse-int [s]
+  #?(:cljs (let [number (js/parseInt s)]
+             (if (js/Number.isNaN number)
+               nil
+               number)))
+  #?(:clj (try (Integer/parseInt s)
+               (catch Exception e nil))))
 
 (def infix-ops
   '#{+ - / * % < > != == <= >= || && & "^^" "^" | << >>})
@@ -17,7 +25,14 @@
 
 (defn expression->js [expression & [top-level]]
   (cond
-    (symbol? expression) (clj-name->js expression)
+    (symbol? expression) (if (some #{\.} (str expression))
+                           (expression->js
+                            (let [parts (map symbol (split (str expression) \.))]
+                              (reduce (fn [a b]
+                                        (list (symbol (str ".-" b))
+                                              a))
+                                      parts)))
+                           (clj-name->js expression))
 
     (or (number? expression) (boolean? expression)) (str expression)
 
@@ -99,9 +114,14 @@
         (str (first args))
 
         (and (symbol? f) (= ".-" (subs (str f) 0 2)))
-        (str (expression->js (first args))
-             "."
-             (clj-name->js (subs (str f) 2)))
+        (if-let [index (parse-int (subs (str f) 2))]
+          (str (expression->js (first args))
+               "["
+               index
+               "]")
+          (str (expression->js (first args))
+               "."
+               (clj-name->js (subs (str f) 2))))
 
         (and (symbol? f) (= "." (first (str f))))
         (str (expression->js (first args))

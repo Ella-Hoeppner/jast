@@ -18,8 +18,8 @@
    '((let arr [])
      (:for [i 10]
            (arr.push (window.rand)))
-     (:while (< [@arr 0] 10)
-             (++ [@arr 0]))
+     (:while (< arr.0 10)
+             (++ arr.0))
      (console.log arr)
      (:for-of [element arr]
               (console.log element)))))
@@ -27,7 +27,7 @@
 (defn start-demo []
   (set! js/window.rand
         (js/eval (jast->js-expression jast-rand-fn)))
-  (js/eval (u/log (jast->js-program jast-program))))
+  (js/eval (jast->js-program jast-program)))
 
 (defn init []
   (js/window.addEventListener "load" start-demo))
