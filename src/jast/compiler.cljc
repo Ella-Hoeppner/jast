@@ -1,5 +1,6 @@
 (ns jast.compiler
-  (:require [clojure.string :refer [join split]]
+  (:require [jast.util :as u]
+            [clojure.string :refer [join split]]
             [jast.tools :refer [clj-name->js]]))
 
 (defn throw-str [s]
@@ -23,8 +24,11 @@
 (defn parenthesize [s]
   (str "(" s ")"))
 
+(declare statement->lines)
+
 (defn expression->js [expression & [top-level]]
   (cond
+    (nil? expression) "null"
     (symbol? expression) (if (some #{\.} (str expression))
                            (expression->js
                             (let [parts (map symbol (split (str expression) \.))]
@@ -108,7 +112,15 @@
                 " => "
                 (if (= 1 (count body))
                   (expression->js (first body))
-                  "JAST: multi-line functions don't work yet!"))))
+                  (str "{\n"
+                       (apply str (map (partial str "  ")
+                                       (mapcat statement->lines 
+                                               (-> body
+                                                   vec
+                                                   (update
+                                                    (dec (count body))
+                                                    (partial list 'return))))))
+                       "}")))))
 
         (= 'raw-js f)
         (str (first args))
